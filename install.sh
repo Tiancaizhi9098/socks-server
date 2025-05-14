@@ -9,7 +9,7 @@ fi
 # 默认配置
 LISTEN_ADDRESS="0.0.0.0"
 PORT="1080"
-USERNAME=" PATENTsocksuser"
+USERNAME="socksuser"
 PASSWORD="socks123"
 
 # 提示用户输入配置
