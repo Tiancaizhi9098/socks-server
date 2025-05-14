@@ -1,112 +1,127 @@
-# Socks5 代理服务器
+# 轻量级Socks5服务器
 
-一个轻量、稳定的 Socks5 代理服务器部署脚本，基于 Dante 开发，支持一键安装和配置，适用于 Linux 系统。脚本允许你设置带用户名/密码认证的 Socks5 代理，并自定义端口和监听地址。
+[![GitHub license](https://img.shields.io/github/license/Tiancaizhi9098/socks-server)](https://github.com/Tiancaizhi9098/socks-server/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Tiancaizhi9098/socks-server)](https://github.com/Tiancaizhi9098/socks-server/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/Tiancaizhi9098/socks-server)](https://github.com/Tiancaizhi9098/socks-server/issues)
 
-## 功能
-- **一键部署**：自动安装和配置 Socks5 代理服务器。
-- **跨平台支持**：兼容 Debian、Ubuntu 和 CentOS。
-- **自定义配置**：可设置监听地址、端口、用户名和密码。
-- **开机自启**：确保系统重启后代理服务自动运行。
-- **轻量稳定**：使用 Dante，性能优异，运行可靠。
+一个轻量级、易于部署的Socks5服务器，一键安装，支持自定义配置和系统服务管理。
 
-## 支持的系统
-- Debian 10、11、12
-- Ubuntu 18.04、20.04、22.04
-- CentOS 7、8
+## 功能特点
 
-## 前置条件
-- 一台干净的 Linux 服务器，需具备 root 或 sudo 权限。
-- 服务器需能访问互联网以安装软件包。
-- 确保目标端口（默认 1080）未被其他服务占用。
+- ✅ 快速安装，简单易用
+- ✅ 支持用户认证（可选）
+- ✅ 自定义监听地址和端口
+- ✅ 自动配置为系统服务
+- ✅ 开机自启动
+- ✅ 支持多种Linux发行版（CentOS、Ubuntu、Debian等）
 
-## 安装
+## 一键安装
 
-### 一键安装
-运行以下命令，直接从本仓库下载并执行安装脚本：
+复制以下命令到终端执行即可完成安装：
 
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/Tiancaizhi9098/socks-server/main/install.sh && chmod +x install.sh && bash install.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/Tiancaizhi9098/socks-server/main/install-socks5.sh)
 ```
 
-此命令会：
-1. 从仓库下载 `install.sh` 脚本。
-2. 赋予脚本执行权限。
-3. 运行脚本以设置 Socks5 代理。
-
-### 手动安装
-1. 克隆仓库：
-   ```bash
-   git clone https://github.com/Tiancaizhi9098/socks-server.git
-   cd socks-server
-   ```
-2. 赋予脚本执行权限：
-   ```bash
-   chmod +x install.sh
-   ```
-3. 以 root 权限运行脚本：
-   ```bash
-   sudo ./install.sh
-   ```
+安装过程中，脚本将提示您输入以下配置信息：
+- 服务器监听地址（默认：0.0.0.0）
+- 服务器端口（默认：1080）
+- 是否启用身份验证
+- 用户名和密码（如启用身份验证）
 
 ## 使用方法
-1. 安装过程中，脚本会提示你配置：
-   - **监听地址**：默认 `0.0.0.0`（监听所有接口）。若仅限本地访问，可设为 `127.0.0.1`。
-   - **端口**：默认 `1080`。可选择未占用的端口。
-   - **用户名**：默认 `socksuser`。
-   - **密码**：默认 `socks123`。
-2. 按回车使用默认值，或输入自定义值。
-3. 安装完成后，脚本会显示配置详情并启动代理服务。
 
-## 测试代理
-在另一台机器或本地使用 `curl` 测试代理是否正常：
+安装完成后，服务将自动启动。您可以使用以下命令管理服务：
 
 ```bash
-curl --socks5 <服务器IP>:<端口> --proxy-user <用户名>:<密码> https://ipinfo.io
+# 启动服务
+systemctl start socks5-server
+
+# 停止服务
+systemctl stop socks5-server
+
+# 重启服务
+systemctl restart socks5-server
+
+# 查看服务状态
+systemctl status socks5-server
+
+# 查看服务日志
+journalctl -u socks5-server
 ```
 
-示例：
+## 客户端配置
+
+您可以在各种支持Socks5协议的客户端中使用此服务器：
+
+### Windows/macOS/Linux
+
+可使用以下客户端软件：
+- Proxifier
+- ShadowsocksX-NG
+- Clash
+- v2rayN
+
+### 浏览器配置
+
+以Chrome为例，可使用SwitchyOmega插件配置Socks5代理：
+
+1. 安装SwitchyOmega插件
+2. 新建情景模式，选择"代理服务器"
+3. 代理协议选择"SOCKS5"
+4. 输入服务器地址和端口
+5. 如有需要，勾选"代理服务器需要认证"并输入用户名和密码
+
+## 卸载
+
+如需卸载，请执行以下命令：
+
 ```bash
-curl --socks5 203.0.113.1:1080 --proxy-user socksuser:socks123 https://ipinfo.io
+bash <(curl -fsSL https://raw.githubusercontent.com/Tiancaizhi9098/socks-server/main/install-socks5.sh) uninstall
 ```
 
-输出应显示服务器的 IP 地址和相关信息。
+或者直接运行本地安装脚本并加上`uninstall`参数：
 
-## 防火墙配置
-如果服务器启用了防火墙，需开放指定端口（默认 1080）。示例：
+```bash
+bash install-socks5.sh uninstall
+```
 
-- **Debian/Ubuntu (ufw)**：
-  ```bash
-  sudo ufw allow 1080/tcp
-  ```
-- **CentOS (firewalld)**：
-  ```bash
-  sudo firewall-cmd --permanent --add-port=1080/tcp
-  sudo firewall-cmd --reload
-  ```
+## 系统要求
 
-## 故障排查
-- 检查 Dante 服务状态：
-  ```bash
-  systemctl status danted
-  ```
-- 查看日志以排查错误：
-  ```bash
-  journalctl -u danted
-  ```
-- 确认端口是否开放：
-  ```bash
-  netstat -tuln | grep <端口>
-  ```
+- CentOS 7+/Debian 9+/Ubuntu 16.04+
+- Root权限
+- 基本的网络连接
 
-## 贡献
-欢迎贡献代码！请按照以下步骤：
-1. Fork 本仓库。
-2. 创建新分支以开发功能或修复问题。
-3. 提交 Pull Request 并清晰描述更改内容。
+## 技术原理
 
-## 许可证
-本项目采用 MIT 许可证，详情见 [LICENSE](LICENSE) 文件。
+本项目基于[MicroSocks](https://github.com/rofl0r/microsocks)实现，是一个轻量级的SOCKS5服务器，使用C语言编写，内存占用极低，非常适合在资源受限的环境中运行。
 
-## 致谢
-- [Dante](https://www.inet.no/dante/) 提供了强大的 Socks5 服务器。
-- 感谢社区驱动的代理部署脚本的启发。
+## 常见问题
+
+**Q: 安装后无法连接服务器怎么办？**
+
+A: 请检查以下几点：
+1. 确认服务是否正常运行：`systemctl status socks5-server`
+2. 检查防火墙是否开放了对应端口
+3. 检查服务器安全组设置
+4. 确认客户端配置是否正确
+
+**Q: 如何修改配置？**
+
+A: 您可以重新运行安装脚本覆盖原有配置，或者直接编辑配置文件：`/etc/socks5/config.json`，并重启服务。
+
+## 开源许可
+
+本项目采用MIT许可证开源。
+
+## 贡献指南
+
+欢迎提交Issue和Pull Request，共同改进此项目！
+
+## 作者
+
+[Tiancaizhi9098](https://github.com/Tiancaizhi9098)
+
+---
+
+如果您觉得这个项目有用，请给项目点个⭐️吧！
