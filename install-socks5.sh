@@ -83,7 +83,37 @@ install_microsocks() {
     cd microsocks
     make
     mkdir -p $(dirname $SOCKS_BIN)
-    cp microsocks $SOCKS_BIN
+    
+    # 停止现有MicroSocks服务（如果运行）
+    if systemctl is-active --quiet socks5-server; then
+        echo -e "${YELLOW}检测到正在运行的MicroSocks服务，正在停止...${PLAIN}"
+        systemctl stop socks5-server || true
+        sleep 1
+    fi
+    
+    # 检查是否有进程占用microsocks二进制文件
+    if lsof $SOCKS_BIN >/dev/null 2>&1; then
+        echo -e "${YELLOW}MicroSocks二进制文件被占用，正在终止相关进程...${PLAIN}"
+        fuser -k $SOCKS_BIN || true
+        sleep 1
+    fi
+    
+    # 尝试复制二进制文件，最多重试3次
+    retries=3
+    for ((i=1; i<=retries; i++)); do
+        if cp microsocks $SOCKS_BIN 2>/dev/null; then
+            echo -e "${GREEN}MicroSocks二进制文件复制成功${PLAIN}"
+            break
+        else
+            echo -e "${YELLOW}复制MicroSocks二进制文件失败，重试 $i/$retries...${PLAIN}"
+            sleep 2
+        fi
+        if [ $i -eq $retries ]; then
+            echo -e "${RED}错误: 无法复制MicroSocks二进制文件，可能是文件仍被占用${PLAIN}"
+            exit 1
+        fi
+    done
+    
     chmod +x $SOCKS_BIN
     
     # 创建配置目录
@@ -91,6 +121,9 @@ install_microsocks() {
     
     # 创建服务用户
     id -u $DAEMON_USER > /dev/null 2>&1 || useradd -r -s /bin/false $DAEMON_USER
+    
+    # 清理临时目录
+    cd / && rm -rf $TMP_DIR
 }
 
 # 配置Socks5服务
