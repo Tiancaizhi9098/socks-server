@@ -104,6 +104,13 @@ configure_socks() {
     read -p "请输入端口号 [$DEFAULT_PORT]: " port
     port=${port:-$DEFAULT_PORT}
     
+    read -p "是否启用UDP支持? (y/n): " udp_enabled
+    if [[ "${udp_enabled,,}" == "y" ]]; then
+        UDP_ARGS="-U"
+    else
+        UDP_ARGS=""
+    fi
+    
     read -p "是否需要身份验证? (y/n): " auth_needed
     if [[ "${auth_needed,,}" == "y" ]]; then
         read -p "请输入用户名 [$DEFAULT_USER]: " username
@@ -127,7 +134,7 @@ After=network.target
 
 [Service]
 User=$DAEMON_USER
-ExecStart=$SOCKS_BIN -i $bind_address -p $port $AUTH_ARGS
+ExecStart=$SOCKS_BIN -i $bind_address -p $port $UDP_ARGS $AUTH_ARGS
 Restart=on-failure
 RestartSec=5s
 
@@ -140,6 +147,7 @@ EOF
 {
     "bind_address": "$bind_address",
     "port": "$port",
+    "udp_enabled": "${udp_enabled,,}",
     "auth": "${auth_needed,,}",
     "username": "$username",
     "password": "$password"
@@ -166,6 +174,7 @@ show_info() {
     echo -e "${GREEN}服务状态:${PLAIN} $(systemctl is-active socks5-server)"
     echo -e "${GREEN}服务地址:${PLAIN} $bind_address"
     echo -e "${GREEN}服务端口:${PLAIN} $port"
+    echo -e "${GREEN}UDP支持:${PLAIN} ${udp_enabled:-n}"
     
     if [[ "${auth_needed,,}" == "y" ]]; then
         echo -e "${GREEN}需要认证:${PLAIN} 是"
@@ -190,14 +199,41 @@ show_info() {
 
 # 卸载Socks5服务
 uninstall_socks() {
-    read -p "确定要卸载Socks5服务吗? (y/n): " confirm
+    read -p "确定要完全卸载Socks5服务及其所有相关组件吗? (y/n): " confirm
     if [[ "${confirm,,}" == "y" ]]; then
+        echo -e "${GREEN}开始卸载Socks5服务...${PLAIN}"
+        
+        # 停止并禁用服务
         systemctl stop socks5-server 2>/dev/null || true
         systemctl disable socks5-server 2>/dev/null || true
+        
+        # 删除服务文件和配置
         rm -f $SOCKS_SERVICE
         rm -f $SOCKS_BIN
         rm -rf $(dirname $SOCKS_CONFIG)
-        echo -e "${GREEN}Socks5服务已成功卸载!${PLAIN}"
+        
+        # 删除服务用户
+        if id -u $DAEMON_USER > /dev/null 2>&1; then
+            userdel -r $DAEMON_USER 2>/dev/null || true
+        fi
+        
+        # 删除安装的依赖包
+        if [ "${release}" == "centos" ]; then
+            yum remove -y gcc make wget curl tar git 2>/dev/null || true
+            yum autoremove -y 2>/dev/null || true
+        else
+            apt-get remove -y gcc make wget curl tar git 2>/dev/null || true
+            apt-get autoremove -y 2>/dev/null || true
+            apt-get purge -y gcc make wget curl tar git 2>/dev/null || true
+        fi
+        
+        # 清理系统
+        systemctl daemon-reload 2>/dev/null || true
+        systemctl reset-failed 2>/dev/null || true
+        
+        echo -e "${GREEN}Socks5服务及其所有相关组件已成功卸载!${PLAIN}"
+    else
+        echo -e "${YELLOW}取消卸载操作${PLAIN}"
     fi
 }
 
