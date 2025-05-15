@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# socks5-server 安装脚本
+# socks5-server 安装脚本 (支持UDP)
 # 作者: Tiancaizhi9098
 # GitHub: https://github.com/Tiancaizhi9098/socks-server
+# 改进: 添加UDP支持
 
 set -e
 
@@ -18,6 +19,7 @@ DEFAULT_PORT="1080"
 DEFAULT_USER="sockuser"
 DEFAULT_PASS="sockpass"
 DEFAULT_BIND="0.0.0.0"
+DEFAULT_UDP="y"
 DAEMON_USER="socks5"
 SOCKS_SERVICE="/etc/systemd/system/socks5-server.service"
 SOCKS_CONFIG="/etc/socks5/config.json"
@@ -119,6 +121,18 @@ configure_socks() {
         password=""
     fi
     
+    # 添加UDP支持选项
+    read -p "是否启用UDP支持? (y/n) [$DEFAULT_UDP]: " enable_udp
+    enable_udp=${enable_udp:-$DEFAULT_UDP}
+    
+    if [[ "${enable_udp,,}" == "y" ]]; then
+        UDP_ARGS="-U"
+        udp_enabled="true"
+    else
+        UDP_ARGS=""
+        udp_enabled="false"
+    fi
+    
     # 创建systemd服务文件
     cat > $SOCKS_SERVICE << EOF
 [Unit]
@@ -127,7 +141,7 @@ After=network.target
 
 [Service]
 User=$DAEMON_USER
-ExecStart=$SOCKS_BIN -i $bind_address -p $port $AUTH_ARGS
+ExecStart=$SOCKS_BIN -i $bind_address -p $port $AUTH_ARGS $UDP_ARGS
 Restart=on-failure
 RestartSec=5s
 
@@ -142,7 +156,8 @@ EOF
     "port": "$port",
     "auth": "${auth_needed,,}",
     "username": "$username",
-    "password": "$password"
+    "password": "$password",
+    "udp_enabled": "$udp_enabled"
 }
 EOF
 
@@ -162,17 +177,33 @@ EOF
 
 # 显示安装信息
 show_info() {
+    # 从配置文件读取信息
+    if [ -f "$SOCKS_CONFIG" ]; then
+        bind_address=$(grep -o '"bind_address": "[^"]*' "$SOCKS_CONFIG" | cut -d'"' -f4)
+        port=$(grep -o '"port": "[^"]*' "$SOCKS_CONFIG" | cut -d'"' -f4)
+        auth_needed=$(grep -o '"auth": "[^"]*' "$SOCKS_CONFIG" | cut -d'"' -f4)
+        username=$(grep -o '"username": "[^"]*' "$SOCKS_CONFIG" | cut -d'"' -f4)
+        password=$(grep -o '"password": "[^"]*' "$SOCKS_CONFIG" | cut -d'"' -f4)
+        udp_enabled=$(grep -o '"udp_enabled": "[^"]*' "$SOCKS_CONFIG" | cut -d'"' -f4)
+    fi
+    
     echo -e "\n${BLUE}-------- Socks5服务器信息 --------${PLAIN}"
     echo -e "${GREEN}服务状态:${PLAIN} $(systemctl is-active socks5-server)"
     echo -e "${GREEN}服务地址:${PLAIN} $bind_address"
     echo -e "${GREEN}服务端口:${PLAIN} $port"
     
-    if [[ "${auth_needed,,}" == "y" ]]; then
+    if [[ "${auth_needed}" == "y" ]]; then
         echo -e "${GREEN}需要认证:${PLAIN} 是"
         echo -e "${GREEN}用户名:${PLAIN} $username"
         echo -e "${GREEN}密码:${PLAIN} $password"
     else
         echo -e "${GREEN}需要认证:${PLAIN} 否"
+    fi
+    
+    if [[ "${udp_enabled}" == "true" ]]; then
+        echo -e "${GREEN}UDP支持:${PLAIN} 已启用"
+    else
+        echo -e "${GREEN}UDP支持:${PLAIN} 已禁用"
     fi
     
     echo -e "\n${YELLOW}使用方法:${PLAIN}"
@@ -211,7 +242,7 @@ main() {
     
     clear
     echo -e "${BLUE}=====================================================${PLAIN}"
-    echo -e "${BLUE}                  Socks5服务器安装脚本               ${PLAIN}"
+    echo -e "${BLUE}             Socks5服务器安装脚本 (支持UDP)          ${PLAIN}"
     echo -e "${BLUE}=====================================================${PLAIN}"
     echo -e "${GREEN}作者:${PLAIN} Tiancaizhi9098"
     echo -e "${GREEN}GitHub:${PLAIN} https://github.com/Tiancaizhi9098/socks-server"
