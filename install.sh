@@ -72,7 +72,7 @@ install_deps() {
             apt-get install -y curl wget git build-essential
             ;;
         centos|fedora|rhel)
-            if [ $OS = "centos" ] && [ ${VERSION_ID:0:1} -eq 7 ]; then
+            if [ "$OS" = "centos" ] && [ ${VERSION_ID:0:1} -eq 7 ]; then
                 yum install -y epel-release
             fi
             yum -y update
@@ -96,6 +96,13 @@ install_deps() {
 # 安装MicroSocks
 install_microsocks() {
     echo -e "${YELLOW}正在安装MicroSocks...${PLAIN}"
+    
+    # 清理可能存在的旧目录
+    if [ -d "/tmp/microsocks" ]; then
+        echo -e "${YELLOW}检测到旧的MicroSocks目录，正在删除...${PLAIN}"
+        rm -rf /tmp/microsocks
+    fi
+    
     cd /tmp
     git clone https://github.com/rofl0r/microsocks.git
     cd microsocks
@@ -131,9 +138,6 @@ configure_socks5() {
     read -p "密码 (默认: $DEFAULT_PASS): " PASSWORD
     PASSWORD=${PASSWORD:-$DEFAULT_PASS}
     
-    read -p "启用UDP转发? (y/n, 默认: y): " ENABLE_UDP
-    ENABLE_UDP=${ENABLE_UDP:-y}
-    
     read -p "设置开机自启? (y/n, 默认: y): " ENABLE_AUTOSTART
     ENABLE_AUTOSTART=${ENABLE_AUTOSTART:-y}
     
@@ -146,7 +150,6 @@ BIND_ADDR=$BIND_ADDR
 BIND_PORT=$BIND_PORT
 USERNAME=$USERNAME
 PASSWORD=$PASSWORD
-ENABLE_UDP=$ENABLE_UDP
 EOF
     
     echo -e "${GREEN}配置完成${PLAIN}"
@@ -155,6 +158,13 @@ EOF
 # 创建systemd服务
 create_service() {
     echo -e "${YELLOW}正在创建系统服务...${PLAIN}"
+    
+    # 读取配置文件
+    source /etc/socks5-server/config
+    
+    # 转义用户名和密码中的特殊字符
+    ESCAPED_USERNAME=$(printf '%q' "$USERNAME")
+    ESCAPED_PASSWORD=$(printf '%q' "$PASSWORD")
     
     cat > /etc/systemd/system/socks5-server.service << EOF
 [Unit]
@@ -166,19 +176,11 @@ Type=simple
 User=root
 Restart=on-failure
 RestartSec=5s
-ExecStart=/usr/local/bin/microsocks -i \${BIND_ADDR} -p \${BIND_PORT} -u \${USERNAME} -P \${PASSWORD} \${UDP_OPT}
-EnvironmentFile=/etc/socks5-server/config
+ExecStart=/usr/local/bin/microsocks -i $BIND_ADDR -p $BIND_PORT -u $ESCAPED_USERNAME -P $ESCAPED_PASSWORD
 
 [Install]
 WantedBy=multi-user.target
 EOF
-
-    # 修复UDP参数
-    if [[ "$ENABLE_UDP" =~ ^[Yy]$ ]]; then
-        sed -i 's/${UDP_OPT}/-U/g' /etc/systemd/system/socks5-server.service
-    else
-        sed -i 's/${UDP_OPT}//g' /etc/systemd/system/socks5-server.service
-    fi
     
     systemctl daemon-reload
     
@@ -188,7 +190,14 @@ EOF
     
     systemctl start socks5-server
     
-    echo -e "${GREEN}服务创建并启动成功${PLAIN}"
+    # 检查服务是否成功启动
+    sleep 2
+    if systemctl is-active --quiet socks5-server; then
+        echo -e "${GREEN}服务创建并启动成功${PLAIN}"
+    else
+        echo -e "${RED}服务启动失败，请检查日志: journalctl -u socks5-server${PLAIN}"
+        exit 1
+    fi
 }
 
 # 显示配置信息
@@ -197,9 +206,8 @@ show_config() {
     echo -e "${GREEN}========== Socks5服务已安装 ==========${PLAIN}"
     echo -e "${YELLOW}服务地址:${PLAIN} $BIND_ADDR"
     echo -e "${YELLOW}服务端口:${PLAIN} $BIND_PORT"
-    echo -e "${YELLOW}用户名:${PLAIN} $USERNAME"
+    echo -e "${YELLOW}用户名:${plain} $USERNAME"
     echo -e "${YELLOW}密码:${PLAIN} $PASSWORD"
-    echo -e "${YELLOW}UDP转发:${PLAIN} $ENABLE_UDP"
     echo -e "${YELLOW}自动启动:${PLAIN} $ENABLE_AUTOSTART"
     echo
     echo -e "${BLUE}管理命令:${PLAIN}"
