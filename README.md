@@ -1,228 +1,112 @@
-#!/bin/bash
+# Socks5 代理服务器
 
-# socks5-server 安装脚本
-# 作者: Tiancaizhi9098
-# GitHub: https://github.com/Tiancaizhi9098/socks-server
+一个轻量、稳定的 Socks5 代理服务器部署脚本，基于 Dante 开发，支持一键安装和配置，适用于 Linux 系统。脚本允许你设置带用户名/密码认证的 Socks5 代理，并自定义端口和监听地址。
 
-set -e
+## 功能
+- **一键部署**：自动安装和配置 Socks5 代理服务器。
+- **跨平台支持**：兼容 Debian、Ubuntu 和 CentOS。
+- **自定义配置**：可设置监听地址、端口、用户名和密码。
+- **开机自启**：确保系统重启后代理服务自动运行。
+- **轻量稳定**：使用 Dante，性能优异，运行可靠。
 
-# 文字颜色
-RED="\033[31m"
-GREEN="\033[32m"
-YELLOW="\033[33m"
-BLUE="\033[36m"
-PLAIN="\033[0m"
+## 支持的系统
+- Debian 10、11、12
+- Ubuntu 18.04、20.04、22.04
+- CentOS 7、8
 
-# 默认配置
-DEFAULT_PORT="1080"
-DEFAULT_USER="sockuser"
-DEFAULT_PASS="sockpass"
-DEFAULT_BIND="0.0.0.0"
-DAEMON_USER="socks5"
-SOCKS_SERVICE="/etc/systemd/system/socks5-server.service"
-SOCKS_CONFIG="/etc/socks5/config.json"
-SOCKS_BIN="/usr/local/bin/microsocks"
+## 前置条件
+- 一台干净的 Linux 服务器，需具备 root 或 sudo 权限。
+- 服务器需能访问互联网以安装软件包。
+- 确保目标端口（默认 1080）未被其他服务占用。
 
-# 检查是否为root用户
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        echo -e "${RED}错误: 必须使用root用户运行此脚本!${PLAIN}"
-        exit 1
-    fi
-}
+## 安装
 
-# 检测系统类型
-check_sys() {
-    if [ -f /etc/redhat-release ]; then
-        release="centos"
-    elif grep -Eqi "debian" /etc/issue; then
-        release="debian"
-    elif grep -Eqi "ubuntu" /etc/issue; then
-        release="ubuntu"
-    elif grep -Eqi "centos|red hat|redhat" /etc/issue; then
-        release="centos"
-    elif grep -Eqi "debian" /proc/version; then
-        release="debian"
-    elif grep -Eqi "ubuntu" /proc/version; then
-        release="ubuntu"
-    elif grep -Eqi "centos|red hat|redhat" /proc/version; then
-        release="centos"
-    else
-        echo -e "${RED}未检测到系统版本，请联系脚本作者!${PLAIN}" && exit 1
-    fi
-    
-    # 检测系统位数
-    if [ $(uname -m) = "x86_64" ]; then
-        arch="amd64"
-    elif [ $(uname -m) = "aarch64" ]; then
-        arch="arm64"
-    else
-        arch="386"
-    fi
-}
+### 一键安装
+运行以下命令，直接从本仓库下载并执行安装脚本：
 
-# 安装依赖
-install_dependencies() {
-    echo -e "${GREEN}安装依赖包...${PLAIN}"
-    if [ "${release}" == "centos" ]; then
-        yum update -y
-        yum install -y gcc make wget curl tar git
-    else
-        apt-get update -y
-        apt-get install -y gcc make wget curl tar git
-    fi
-}
+```bash
+wget -O install.sh https://raw.githubusercontent.com/Tiancaizhi9098/socks-server/main/install.sh && chmod +x install.sh && bash install.sh
+```
 
-# 安装MicroSocks
-install_microsocks() {
-    echo -e "${GREEN}安装MicroSocks...${PLAIN}"
-    TMP_DIR=$(mktemp -d)
-    cd $TMP_DIR
-    
-    git clone https://github.com/rofl0r/microsocks.git
-    cd microsocks
-    make
-    mkdir -p $(dirname $SOCKS_BIN)
-    cp microsocks $SOCKS_BIN
-    chmod +x $SOCKS_BIN
-    
-    # 创建配置目录
-    mkdir -p $(dirname $SOCKS_CONFIG)
-    
-    # 创建服务用户
-    id -u $DAEMON_USER > /dev/null 2>&1 || useradd -r -s /bin/false $DAEMON_USER
-}
+此命令会：
+1. 从仓库下载 `install.sh` 脚本。
+2. 赋予脚本执行权限。
+3. 运行脚本以设置 Socks5 代理。
 
-# 配置Socks5服务
-configure_socks() {
-    echo -e "${GREEN}配置Socks5服务...${PLAIN}"
-    
-    # 提示用户输入配置信息
-    read -p "请输入服务监听地址 [$DEFAULT_BIND]: " bind_address
-    bind_address=${bind_address:-$DEFAULT_BIND}
-    
-    read -p "请输入端口号 [$DEFAULT_PORT]: " port
-    port=${port:-$DEFAULT_PORT}
-    
-    read -p "是否需要身份验证? (y/n): " auth_needed
-    if [[ "${auth_needed,,}" == "y" ]]; then
-        read -p "请输入用户名 [$DEFAULT_USER]: " username
-        username=${username:-$DEFAULT_USER}
-        
-        read -p "请输入密码 [$DEFAULT_PASS]: " password
-        password=${password:-$DEFAULT_PASS}
-        
-        AUTH_ARGS="-u $username -P $password"
-    else
-        AUTH_ARGS=""
-        username=""
-        password=""
-    fi
-    
-    # 创建systemd服务文件
-    cat > $SOCKS_SERVICE << EOF
-[Unit]
-Description=MicroSocks Socks5 Server
-After=network.target
+### 手动安装
+1. 克隆仓库：
+   ```bash
+   git clone https://github.com/Tiancaizhi9098/socks-server.git
+   cd socks-server
+   ```
+2. 赋予脚本执行权限：
+   ```bash
+   chmod +x install.sh
+   ```
+3. 以 root 权限运行脚本：
+   ```bash
+   sudo ./install.sh
+   ```
 
-[Service]
-User=$DAEMON_USER
-ExecStart=$SOCKS_BIN -i $bind_address -p $port $AUTH_ARGS
-Restart=on-failure
-RestartSec=5s
+## 使用方法
+1. 安装过程中，脚本会提示你配置：
+   - **监听地址**：默认 `0.0.0.0`（监听所有接口）。若仅限本地访问，可设为 `127.0.0.1`。
+   - **端口**：默认 `1080`。可选择未占用的端口。
+   - **用户名**：默认 `socksuser`。
+   - **密码**：默认 `socks123`。
+2. 按回车使用默认值，或输入自定义值。
+3. 安装完成后，脚本会显示配置详情并启动代理服务。
 
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    # 保存配置信息(用于后续更新或显示)
-    cat > $SOCKS_CONFIG << EOF
-{
-    "bind_address": "$bind_address",
-    "port": "$port",
-    "auth": "${auth_needed,,}",
-    "username": "$username",
-    "password": "$password"
-}
-EOF
+## 测试代理
+在另一台机器或本地使用 `curl` 测试代理是否正常：
 
-    # 设置服务自启动
-    systemctl daemon-reload
-    systemctl enable socks5-server
-    systemctl start socks5-server
-    
-    # 检查服务状态
-    if systemctl is-active --quiet socks5-server; then
-        echo -e "${GREEN}Socks5服务已成功启动!${PLAIN}"
-    else
-        echo -e "${RED}Socks5服务启动失败，请检查日志: journalctl -u socks5-server${PLAIN}"
-        exit 1
-    fi
-}
+```bash
+curl --socks5 <服务器IP>:<端口> --proxy-user <用户名>:<密码> https://ipinfo.io
+```
 
-# 显示安装信息
-show_info() {
-    echo -e "\n${BLUE}-------- Socks5服务器信息 --------${PLAIN}"
-    echo -e "${GREEN}服务状态:${PLAIN} $(systemctl is-active socks5-server)"
-    echo -e "${GREEN}服务地址:${PLAIN} $bind_address"
-    echo -e "${GREEN}服务端口:${PLAIN} $port"
-    
-    if [[ "${auth_needed,,}" == "y" ]]; then
-        echo -e "${GREEN}需要认证:${PLAIN} 是"
-        echo -e "${GREEN}用户名:${PLAIN} $username"
-        echo -e "${GREEN}密码:${PLAIN} $password"
-    else
-        echo -e "${GREEN}需要认证:${PLAIN} 否"
-    fi
-    
-    echo -e "\n${YELLOW}使用方法:${PLAIN}"
-    echo -e "- 启动服务: ${GREEN}systemctl start socks5-server${PLAIN}"
-    echo -e "- 停止服务: ${GREEN}systemctl stop socks5-server${PLAIN}"
-    echo -e "- 重启服务: ${GREEN}systemctl restart socks5-server${PLAIN}"
-    echo -e "- 查看状态: ${GREEN}systemctl status socks5-server${PLAIN}"
-    echo -e "- 查看日志: ${GREEN}journalctl -u socks5-server${PLAIN}"
-    echo -e "\n${BLUE}--------------------------------${PLAIN}"
-    
-    echo -e "\n${GREEN}Socks5服务器安装完成!${PLAIN}"
-    echo -e "${GREEN}作者:${PLAIN} Tiancaizhi9098"
-    echo -e "${GREEN}GitHub:${PLAIN} https://github.com/Tiancaizhi9098/socks-server"
-}
+示例：
+```bash
+curl --socks5 203.0.113.1:1080 --proxy-user socksuser:socks123 https://ipinfo.io
+```
 
-# 卸载Socks5服务
-uninstall_socks() {
-    read -p "确定要卸载Socks5服务吗? (y/n): " confirm
-    if [[ "${confirm,,}" == "y" ]]; then
-        systemctl stop socks5-server 2>/dev/null || true
-        systemctl disable socks5-server 2>/dev/null || true
-        rm -f $SOCKS_SERVICE
-        rm -f $SOCKS_BIN
-        rm -rf $(dirname $SOCKS_CONFIG)
-        echo -e "${GREEN}Socks5服务已成功卸载!${PLAIN}"
-    fi
-}
+输出应显示服务器的 IP 地址和相关信息。
 
-# 主函数
-main() {
-    if [ "$1" == "uninstall" ]; then
-        check_root
-        uninstall_socks
-        exit 0
-    fi
-    
-    clear
-    echo -e "${BLUE}=====================================================${PLAIN}"
-    echo -e "${BLUE}                  Socks5服务器安装脚本               ${PLAIN}"
-    echo -e "${BLUE}=====================================================${PLAIN}"
-    echo -e "${GREEN}作者:${PLAIN} Tiancaizhi9098"
-    echo -e "${GREEN}GitHub:${PLAIN} https://github.com/Tiancaizhi9098/socks-server"
-    echo -e "${BLUE}=====================================================${PLAIN}"
-    
-    check_root
-    check_sys
-    install_dependencies
-    install_microsocks
-    configure_socks
-    show_info
-}
+## 防火墙配置
+如果服务器启用了防火墙，需开放指定端口（默认 1080）。示例：
 
-main "$@"
+- **Debian/Ubuntu (ufw)**：
+  ```bash
+  sudo ufw allow 1080/tcp
+  ```
+- **CentOS (firewalld)**：
+  ```bash
+  sudo firewall-cmd --permanent --add-port=1080/tcp
+  sudo firewall-cmd --reload
+  ```
+
+## 故障排查
+- 检查 Dante 服务状态：
+  ```bash
+  systemctl status danted
+  ```
+- 查看日志以排查错误：
+  ```bash
+  journalctl -u danted
+  ```
+- 确认端口是否开放：
+  ```bash
+  netstat -tuln | grep <端口>
+  ```
+
+## 贡献
+欢迎贡献代码！请按照以下步骤：
+1. Fork 本仓库。
+2. 创建新分支以开发功能或修复问题。
+3. 提交 Pull Request 并清晰描述更改内容。
+
+## 许可证
+本项目采用 MIT 许可证，详情见 [LICENSE](LICENSE) 文件。
+
+## 致谢
+- [Dante](https://www.inet.no/dante/) 提供了强大的 Socks5 服务器。
+- 感谢社区驱动的代理部署脚本的启发。
