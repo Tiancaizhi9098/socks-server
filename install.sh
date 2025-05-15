@@ -36,18 +36,21 @@ check_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$ID
-        if [ $OS = "centos" ] && [ ! -z "$VERSION_ID" ]; then
-            if [ ${VERSION_ID:0:1} -lt 7 ]; then
+        if [ "$OS" = "centos" ] && [ ! -z "$VERSION_ID" ]; then
+            VERSION_NUM=$(echo "$VERSION_ID" | cut -d. -f1)
+            if [ "$VERSION_NUM" -lt 7 ]; then
                 echo -e "${RED}不支持CentOS 7以下版本${PLAIN}"
                 exit 1
             fi
-        elif [ $OS = "debian" ] && [ ! -z "$VERSION_ID" ]; then
-            if [ ${VERSION_ID:0:1} -lt 9 ]; then
+        elif [ "$OS" = "debian" ] && [ ! -z "$VERSION_ID" ]; then
+            VERSION_NUM=$(echo "$VERSION_ID" | cut -d. -f1)
+            if [ "$VERSION_NUM" -lt 9 ]; then
                 echo -e "${RED}不支持Debian 9以下版本${PLAIN}"
                 exit 1
             fi
-        elif [ $OS = "ubuntu" ] && [ ! -z "$VERSION_ID" ]; then
-            if [ ${VERSION_ID:0:2} -lt 18 ]; then
+        elif [ "$OS" = "ubuntu" ] && [ ! -z "$VERSION_ID" ]; then
+            VERSION_NUM=$(echo "$VERSION_ID" | cut -d. -f1)
+            if [ "$VERSION_NUM" -lt 18 ]; then
                 echo -e "${RED}不支持Ubuntu 18.04以下版本${PLAIN}"
                 exit 1
             fi
