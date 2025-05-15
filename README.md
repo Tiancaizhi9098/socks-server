@@ -1,127 +1,228 @@
-# 轻量级Socks5服务器
+#!/bin/bash
 
-[![GitHub license](https://img.shields.io/github/license/Tiancaizhi9098/socks-server)](https://github.com/Tiancaizhi9098/socks-server/blob/main/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/Tiancaizhi9098/socks-server)](https://github.com/Tiancaizhi9098/socks-server/stargazers)
-[![GitHub issues](https://img.shields.io/github/issues/Tiancaizhi9098/socks-server)](https://github.com/Tiancaizhi9098/socks-server/issues)
+# socks5-server 安装脚本
+# 作者: Tiancaizhi9098
+# GitHub: https://github.com/Tiancaizhi9098/socks-server
 
-一个轻量级、易于部署的Socks5服务器，一键安装，支持自定义配置和系统服务管理。
+set -e
 
-## 功能特点
+# 文字颜色
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+BLUE="\033[36m"
+PLAIN="\033[0m"
 
-- ✅ 快速安装，简单易用
-- ✅ 支持用户认证（可选）
-- ✅ 自定义监听地址和端口
-- ✅ 自动配置为系统服务
-- ✅ 开机自启动
-- ✅ 支持多种Linux发行版（CentOS、Ubuntu、Debian等）
+# 默认配置
+DEFAULT_PORT="1080"
+DEFAULT_USER="sockuser"
+DEFAULT_PASS="sockpass"
+DEFAULT_BIND="0.0.0.0"
+DAEMON_USER="socks5"
+SOCKS_SERVICE="/etc/systemd/system/socks5-server.service"
+SOCKS_CONFIG="/etc/socks5/config.json"
+SOCKS_BIN="/usr/local/bin/microsocks"
 
-## 一键安装
+# 检查是否为root用户
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}错误: 必须使用root用户运行此脚本!${PLAIN}"
+        exit 1
+    fi
+}
 
-复制以下命令到终端执行即可完成安装：
+# 检测系统类型
+check_sys() {
+    if [ -f /etc/redhat-release ]; then
+        release="centos"
+    elif grep -Eqi "debian" /etc/issue; then
+        release="debian"
+    elif grep -Eqi "ubuntu" /etc/issue; then
+        release="ubuntu"
+    elif grep -Eqi "centos|red hat|redhat" /etc/issue; then
+        release="centos"
+    elif grep -Eqi "debian" /proc/version; then
+        release="debian"
+    elif grep -Eqi "ubuntu" /proc/version; then
+        release="ubuntu"
+    elif grep -Eqi "centos|red hat|redhat" /proc/version; then
+        release="centos"
+    else
+        echo -e "${RED}未检测到系统版本，请联系脚本作者!${PLAIN}" && exit 1
+    fi
+    
+    # 检测系统位数
+    if [ $(uname -m) = "x86_64" ]; then
+        arch="amd64"
+    elif [ $(uname -m) = "aarch64" ]; then
+        arch="arm64"
+    else
+        arch="386"
+    fi
+}
 
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Tiancaizhi9098/socks-server/main/install-socks5.sh)
-```
+# 安装依赖
+install_dependencies() {
+    echo -e "${GREEN}安装依赖包...${PLAIN}"
+    if [ "${release}" == "centos" ]; then
+        yum update -y
+        yum install -y gcc make wget curl tar git
+    else
+        apt-get update -y
+        apt-get install -y gcc make wget curl tar git
+    fi
+}
 
-安装过程中，脚本将提示您输入以下配置信息：
-- 服务器监听地址（默认：0.0.0.0）
-- 服务器端口（默认：1080）
-- 是否启用身份验证
-- 用户名和密码（如启用身份验证）
+# 安装MicroSocks
+install_microsocks() {
+    echo -e "${GREEN}安装MicroSocks...${PLAIN}"
+    TMP_DIR=$(mktemp -d)
+    cd $TMP_DIR
+    
+    git clone https://github.com/rofl0r/microsocks.git
+    cd microsocks
+    make
+    mkdir -p $(dirname $SOCKS_BIN)
+    cp microsocks $SOCKS_BIN
+    chmod +x $SOCKS_BIN
+    
+    # 创建配置目录
+    mkdir -p $(dirname $SOCKS_CONFIG)
+    
+    # 创建服务用户
+    id -u $DAEMON_USER > /dev/null 2>&1 || useradd -r -s /bin/false $DAEMON_USER
+}
 
-## 使用方法
+# 配置Socks5服务
+configure_socks() {
+    echo -e "${GREEN}配置Socks5服务...${PLAIN}"
+    
+    # 提示用户输入配置信息
+    read -p "请输入服务监听地址 [$DEFAULT_BIND]: " bind_address
+    bind_address=${bind_address:-$DEFAULT_BIND}
+    
+    read -p "请输入端口号 [$DEFAULT_PORT]: " port
+    port=${port:-$DEFAULT_PORT}
+    
+    read -p "是否需要身份验证? (y/n): " auth_needed
+    if [[ "${auth_needed,,}" == "y" ]]; then
+        read -p "请输入用户名 [$DEFAULT_USER]: " username
+        username=${username:-$DEFAULT_USER}
+        
+        read -p "请输入密码 [$DEFAULT_PASS]: " password
+        password=${password:-$DEFAULT_PASS}
+        
+        AUTH_ARGS="-u $username -P $password"
+    else
+        AUTH_ARGS=""
+        username=""
+        password=""
+    fi
+    
+    # 创建systemd服务文件
+    cat > $SOCKS_SERVICE << EOF
+[Unit]
+Description=MicroSocks Socks5 Server
+After=network.target
 
-安装完成后，服务将自动启动。您可以使用以下命令管理服务：
+[Service]
+User=$DAEMON_USER
+ExecStart=$SOCKS_BIN -i $bind_address -p $port $AUTH_ARGS
+Restart=on-failure
+RestartSec=5s
 
-```bash
-# 启动服务
-systemctl start socks5-server
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # 保存配置信息(用于后续更新或显示)
+    cat > $SOCKS_CONFIG << EOF
+{
+    "bind_address": "$bind_address",
+    "port": "$port",
+    "auth": "${auth_needed,,}",
+    "username": "$username",
+    "password": "$password"
+}
+EOF
 
-# 停止服务
-systemctl stop socks5-server
+    # 设置服务自启动
+    systemctl daemon-reload
+    systemctl enable socks5-server
+    systemctl start socks5-server
+    
+    # 检查服务状态
+    if systemctl is-active --quiet socks5-server; then
+        echo -e "${GREEN}Socks5服务已成功启动!${PLAIN}"
+    else
+        echo -e "${RED}Socks5服务启动失败，请检查日志: journalctl -u socks5-server${PLAIN}"
+        exit 1
+    fi
+}
 
-# 重启服务
-systemctl restart socks5-server
+# 显示安装信息
+show_info() {
+    echo -e "\n${BLUE}-------- Socks5服务器信息 --------${PLAIN}"
+    echo -e "${GREEN}服务状态:${PLAIN} $(systemctl is-active socks5-server)"
+    echo -e "${GREEN}服务地址:${PLAIN} $bind_address"
+    echo -e "${GREEN}服务端口:${PLAIN} $port"
+    
+    if [[ "${auth_needed,,}" == "y" ]]; then
+        echo -e "${GREEN}需要认证:${PLAIN} 是"
+        echo -e "${GREEN}用户名:${PLAIN} $username"
+        echo -e "${GREEN}密码:${PLAIN} $password"
+    else
+        echo -e "${GREEN}需要认证:${PLAIN} 否"
+    fi
+    
+    echo -e "\n${YELLOW}使用方法:${PLAIN}"
+    echo -e "- 启动服务: ${GREEN}systemctl start socks5-server${PLAIN}"
+    echo -e "- 停止服务: ${GREEN}systemctl stop socks5-server${PLAIN}"
+    echo -e "- 重启服务: ${GREEN}systemctl restart socks5-server${PLAIN}"
+    echo -e "- 查看状态: ${GREEN}systemctl status socks5-server${PLAIN}"
+    echo -e "- 查看日志: ${GREEN}journalctl -u socks5-server${PLAIN}"
+    echo -e "\n${BLUE}--------------------------------${PLAIN}"
+    
+    echo -e "\n${GREEN}Socks5服务器安装完成!${PLAIN}"
+    echo -e "${GREEN}作者:${PLAIN} Tiancaizhi9098"
+    echo -e "${GREEN}GitHub:${PLAIN} https://github.com/Tiancaizhi9098/socks-server"
+}
 
-# 查看服务状态
-systemctl status socks5-server
+# 卸载Socks5服务
+uninstall_socks() {
+    read -p "确定要卸载Socks5服务吗? (y/n): " confirm
+    if [[ "${confirm,,}" == "y" ]]; then
+        systemctl stop socks5-server 2>/dev/null || true
+        systemctl disable socks5-server 2>/dev/null || true
+        rm -f $SOCKS_SERVICE
+        rm -f $SOCKS_BIN
+        rm -rf $(dirname $SOCKS_CONFIG)
+        echo -e "${GREEN}Socks5服务已成功卸载!${PLAIN}"
+    fi
+}
 
-# 查看服务日志
-journalctl -u socks5-server
-```
+# 主函数
+main() {
+    if [ "$1" == "uninstall" ]; then
+        check_root
+        uninstall_socks
+        exit 0
+    fi
+    
+    clear
+    echo -e "${BLUE}=====================================================${PLAIN}"
+    echo -e "${BLUE}                  Socks5服务器安装脚本               ${PLAIN}"
+    echo -e "${BLUE}=====================================================${PLAIN}"
+    echo -e "${GREEN}作者:${PLAIN} Tiancaizhi9098"
+    echo -e "${GREEN}GitHub:${PLAIN} https://github.com/Tiancaizhi9098/socks-server"
+    echo -e "${BLUE}=====================================================${PLAIN}"
+    
+    check_root
+    check_sys
+    install_dependencies
+    install_microsocks
+    configure_socks
+    show_info
+}
 
-## 客户端配置
-
-您可以在各种支持Socks5协议的客户端中使用此服务器：
-
-### Windows/macOS/Linux
-
-可使用以下客户端软件：
-- Proxifier
-- ShadowsocksX-NG
-- Clash
-- v2rayN
-
-### 浏览器配置
-
-以Chrome为例，可使用SwitchyOmega插件配置Socks5代理：
-
-1. 安装SwitchyOmega插件
-2. 新建情景模式，选择"代理服务器"
-3. 代理协议选择"SOCKS5"
-4. 输入服务器地址和端口
-5. 如有需要，勾选"代理服务器需要认证"并输入用户名和密码
-
-## 卸载
-
-如需卸载，请执行以下命令：
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Tiancaizhi9098/socks-server/main/install-socks5.sh) uninstall
-```
-
-或者直接运行本地安装脚本并加上`uninstall`参数：
-
-```bash
-bash install-socks5.sh uninstall
-```
-
-## 系统要求
-
-- CentOS 7+/Debian 9+/Ubuntu 16.04+
-- Root权限
-- 基本的网络连接
-
-## 技术原理
-
-本项目基于[MicroSocks](https://github.com/rofl0r/microsocks)实现，是一个轻量级的SOCKS5服务器，使用C语言编写，内存占用极低，非常适合在资源受限的环境中运行。
-
-## 常见问题
-
-**Q: 安装后无法连接服务器怎么办？**
-
-A: 请检查以下几点：
-1. 确认服务是否正常运行：`systemctl status socks5-server`
-2. 检查防火墙是否开放了对应端口
-3. 检查服务器安全组设置
-4. 确认客户端配置是否正确
-
-**Q: 如何修改配置？**
-
-A: 您可以重新运行安装脚本覆盖原有配置，或者直接编辑配置文件：`/etc/socks5/config.json`，并重启服务。
-
-## 开源许可
-
-本项目采用MIT许可证开源。
-
-## 贡献指南
-
-欢迎提交Issue和Pull Request，共同改进此项目！
-
-## 作者
-
-[Tiancaizhi9098](https://github.com/Tiancaizhi9098)
-
----
-
-如果您觉得这个项目有用，请给项目点个⭐️吧！
+main "$@"
