@@ -78,6 +78,13 @@ install_dependencies() {
 # 安装MicroSocks
 install_microsocks() {
     echo -e "${GREEN}安装MicroSocks...${PLAIN}"
+    
+    # 如果服务已存在，先停止服务
+    if [ -f "$SOCKS_SERVICE" ]; then
+        echo -e "${YELLOW}检测到现有服务，正在停止...${PLAIN}"
+        systemctl stop socks5-server 2>/dev/null || true
+    fi
+    
     TMP_DIR=$(mktemp -d)
     cd $TMP_DIR
     
@@ -85,6 +92,12 @@ install_microsocks() {
     cd microsocks
     make
     mkdir -p $(dirname $SOCKS_BIN)
+    
+    # 先检查文件是否存在，如果存在则先删除
+    if [ -f "$SOCKS_BIN" ]; then
+        rm -f $SOCKS_BIN
+    fi
+    
     cp microsocks $SOCKS_BIN
     chmod +x $SOCKS_BIN
     
@@ -238,6 +251,13 @@ main() {
         check_root
         uninstall_socks
         exit 0
+    fi
+    
+    # 如果是升级模式，先确保停止服务
+    if [ "$1" == "upgrade" ] || [ "$1" == "update" ]; then
+        check_root
+        systemctl stop socks5-server 2>/dev/null || true
+        echo -e "${GREEN}正在升级Socks5服务...${PLAIN}"
     fi
     
     clear
